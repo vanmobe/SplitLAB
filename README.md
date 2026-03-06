@@ -2,7 +2,6 @@
 
 Local stem splitter with:
 - Python engine (`engine/`)
-- Native macOS SwiftUI app (`macos-app/`)
 - Cross-platform Tauri desktop app (`desktop-app/`) for macOS and Windows rollout
 
 ## Functionality
