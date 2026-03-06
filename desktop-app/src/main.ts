@@ -385,11 +385,49 @@ async function getModels(): Promise<string[]> {
 }
 
 async function getSelfCheck(): Promise<SelfCheckResponse> {
-  const resp = await fetch(`${BASE_URL}/self-check`);
-  if (!resp.ok) {
-    throw await parseError(resp);
+  const endpoints = [`${BASE_URL}/self-check`, `${BASE_URL}/self_check`];
+  for (const url of endpoints) {
+    const resp = await fetch(url);
+    if (resp.ok) {
+      return (await resp.json()) as SelfCheckResponse;
+    }
+    if (resp.status !== 404) {
+      throw await parseError(resp);
+    }
   }
-  return (await resp.json()) as SelfCheckResponse;
+
+  // Compatibility fallback: older engines may not expose diagnostics routes.
+  let models: string[] = [];
+  try {
+    models = await getModels();
+  } catch {
+    // Keep diagnostics usable even if model listing also fails.
+  }
+  return {
+    ok: true,
+    checks: [
+      {
+        key: "diagnostics_route",
+        status: "warn",
+        message: "Connected engine does not expose /self-check. Running compatibility diagnostics.",
+      },
+      {
+        key: "models",
+        status: models.length > 0 ? "pass" : "warn",
+        message:
+          models.length > 0
+            ? `${models.length} model(s) available.`
+            : "Could not verify available models from compatibility diagnostics.",
+      },
+    ],
+    python_executable: "unknown",
+    python_version: "unknown",
+    demucs_backend: null,
+    demucs_command: [],
+    ffmpeg_path: null,
+    models_count: models.length,
+    models,
+  };
 }
 
 function renderSelfCheck(data: SelfCheckResponse): void {

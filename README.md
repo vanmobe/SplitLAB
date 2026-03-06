@@ -7,6 +7,10 @@ Local stem splitter with:
 ## Functionality
 SplitLAB is a local AI stem separation tool that runs on your own machine.
 
+![SPLITLAB Main UI](docs/images/splitlab.png)
+
+![SPLITLAB Player](docs/images/splitlab-player.png)
+
 - Separates tracks into `2` stems (`vocals`, `instrumental`) or `4` stems (`vocals`, `drums`, `bass`, `other`)
 - Supports model selection and optional 2-model ensemble for higher quality output
 - Includes quality modes (`fast`, `balanced`, `high`) and presets (`fast`, `best`, `vocal_boost`)
