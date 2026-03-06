@@ -223,12 +223,31 @@ jobs:
           echo "Generated release notes:"
           cat "${NOTES}"
 
+      - name: Verify release assets exist
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          FILES=(
+            release-assets/*.dmg
+            release-assets/*.app.tar.gz
+            release-assets/*.msi
+            release-assets/*.exe
+          )
+          if [ ${#FILES[@]} -eq 0 ]; then
+            echo "No installer files found in release-assets. Failing release job."
+            exit 1
+          fi
+          echo "Release assets to publish:"
+          ls -1 "${FILES[@]}"
+
       - name: Publish GitHub release assets
         uses: softprops/action-gh-release@v2
         with:
           draft: false
           prerelease: false
           body_path: release-notes.md
+          fail_on_unmatched_files: true
           files: |
             release-assets/*.dmg
             release-assets/*.app.tar.gz
