@@ -40,7 +40,7 @@ npm run build
 - `../.github/workflows/build-installers.yml`:
   - `workflow_dispatch`: manual macOS + Windows installer build
   - `push tags v*`: builds and publishes release assets
-  - Run artifacts: downloadable in GitHub Actions under `splitlab-macos-latest` / `splitlab-windows-latest`
+  - Run artifacts: downloadable in GitHub Actions under `splitlab-macos` / `splitlab-windows`
   - Release assets: `https://github.com/vanmobe/AUDIOLAB.sound.splitter/releases`
 
 ## Screenshot Placeholder

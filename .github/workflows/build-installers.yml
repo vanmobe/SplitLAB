@@ -40,12 +40,55 @@ jobs:
         run: npm run tauri build
         working-directory: desktop-app
 
-      - name: Upload installer artifacts
+      - name: Verify macOS installers
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          DMG=(desktop-app/src-tauri/target/release/bundle/dmg/*.dmg)
+          APP_TAR=(desktop-app/src-tauri/target/release/bundle/macos/*.app.tar.gz)
+          if [ ${#DMG[@]} -eq 0 ] || [ ${#APP_TAR[@]} -eq 0 ]; then
+            echo "Expected macOS installers (.dmg and .app.tar.gz) were not produced."
+            exit 1
+          fi
+          echo "Found macOS installers:"
+          ls -1 desktop-app/src-tauri/target/release/bundle/dmg/*.dmg
+          ls -1 desktop-app/src-tauri/target/release/bundle/macos/*.app.tar.gz
+
+      - name: Verify Windows installers
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $msi = Get-ChildItem -Path "desktop-app/src-tauri/target/release/bundle/msi/*.msi" -ErrorAction SilentlyContinue
+          $exe = Get-ChildItem -Path "desktop-app/src-tauri/target/release/bundle/nsis/*.exe" -ErrorAction SilentlyContinue
+          if (-not $msi -or -not $exe) {
+            Write-Error "Expected Windows installers (.msi and .exe) were not produced."
+            exit 1
+          }
+          Write-Host "Found Windows installers:"
+          $msi | ForEach-Object { $_.FullName }
+          $exe | ForEach-Object { $_.FullName }
+
+      - name: Upload installer artifacts (macOS)
+        if: runner.os == 'macOS'
         uses: actions/upload-artifact@v4
         with:
-          name: splitlab-${{ matrix.os }}
+          name: splitlab-macos
           path: |
-            desktop-app/src-tauri/target/release/bundle/**
+            desktop-app/src-tauri/target/release/bundle/dmg/*.dmg
+            desktop-app/src-tauri/target/release/bundle/macos/*.app.tar.gz
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Upload installer artifacts (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: splitlab-windows
+          path: |
+            desktop-app/src-tauri/target/release/bundle/msi/*.msi
+            desktop-app/src-tauri/target/release/bundle/nsis/*.exe
           retention-days: 14
           if-no-files-found: error
 
