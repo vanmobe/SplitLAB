@@ -194,15 +194,18 @@ def run_job(job: Job) -> None:
                 sep_state["progress"] = p
                 sep_state["message"] = m
 
-            result["stems_folder"] = run_demucs_mlx(
-                job.input_path,
-                temp_root,
-                stems=job.stems,
-                quality_mode=job.quality_mode,
-                model=job.model,
-                ensemble_model=job.ensemble_model,
-                progress_cb=_on_progress,
-            )
+            try:
+                result["stems_folder"] = run_demucs_mlx(
+                    job.input_path,
+                    temp_root,
+                    stems=job.stems,
+                    quality_mode=job.quality_mode,
+                    model=job.model,
+                    ensemble_model=job.ensemble_model,
+                    progress_cb=_on_progress,
+                )
+            except Exception as e:
+                result["error"] = str(e)
 
         worker = threading.Thread(target=_run_sep, daemon=True)
         worker.start()
@@ -219,6 +222,9 @@ def run_job(job: Job) -> None:
         worker.join()
 
         stems_folder = result.get("stems_folder")
+        sep_error = result.get("error")
+        if sep_error:
+            raise RuntimeError(str(sep_error))
         if not stems_folder:
             raise RuntimeError("Separation failed before output was produced.")
         stems_folder = cast(Path, stems_folder)

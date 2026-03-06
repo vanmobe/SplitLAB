@@ -11,7 +11,9 @@ import sys
 from jobs import STORE, run_job, external_demucs_running, external_demucs_processes
 from demucs_runner import (
     demucs_list_models_cmd,
+    filter_compatible_models,
     fallback_models_for_backend,
+    incompatible_models_for_backend,
     resolve_demucs_backend,
 )
 
@@ -102,26 +104,27 @@ def models():
         raise HTTPException(status_code=500, detail=f"No Demucs backend available: {e}")
 
     fallback = fallback_models_for_backend(backend_name)
+    blocked = incompatible_models_for_backend(backend_name)
     if not cmd:
-        return ModelsResponse(models=fallback)
+        return ModelsResponse(models=filter_compatible_models(fallback, backend_name))
 
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=20, check=False)
     except Exception as e:
         if fallback:
-            return ModelsResponse(models=fallback)
+            return ModelsResponse(models=filter_compatible_models(fallback, backend_name))
         raise HTTPException(status_code=500, detail=f"Failed to list models: {e}")
 
     if proc.returncode != 0:
         detail = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
         if fallback:
-            return ModelsResponse(models=fallback)
+            return ModelsResponse(models=filter_compatible_models(fallback, backend_name))
         raise HTTPException(status_code=500, detail=f"Model listing failed: {detail[-500:]}")
 
-    parsed = _parse_models_output((proc.stdout or "").splitlines())
+    parsed = filter_compatible_models(_parse_models_output((proc.stdout or "").splitlines()), backend_name)
     if not parsed:
         if fallback:
-            return ModelsResponse(models=fallback)
+            return ModelsResponse(models=filter_compatible_models(fallback, backend_name))
         raise HTTPException(status_code=500, detail=f"Model listing returned no models from backend {backend_name}.")
     return ModelsResponse(models=parsed)
 
@@ -129,6 +132,7 @@ def models():
 def self_check():
     checks: list[CheckItem] = []
     backend_name: str | None = None
+    blocked: set[str] = set()
     demucs_cmd: list[str] = []
     models: list[str] = []
     ffmpeg_path = shutil.which("ffmpeg")
@@ -143,6 +147,7 @@ def self_check():
 
     try:
         backend_name, _, _ = resolve_demucs_backend()
+        blocked = incompatible_models_for_backend(backend_name)
         demucs_cmd = demucs_list_models_cmd()
         checks.append(
             CheckItem(
@@ -187,7 +192,10 @@ def self_check():
                 check=False,
             )
             if proc.returncode == 0:
-                models = _parse_models_output((proc.stdout or "").splitlines())
+                models = filter_compatible_models(
+                    _parse_models_output((proc.stdout or "").splitlines()),
+                    backend_name,
+                )
                 if models:
                     checks.append(
                         CheckItem(
@@ -222,7 +230,7 @@ def self_check():
                 )
             )
     elif backend_name:
-        models = fallback_models_for_backend(backend_name)
+        models = filter_compatible_models(fallback_models_for_backend(backend_name), backend_name)
         if models:
             checks.append(
                 CheckItem(
@@ -231,6 +239,14 @@ def self_check():
                     message=f"Using fallback model list for backend {backend_name}.",
                 )
             )
+    if blocked:
+        checks.append(
+            CheckItem(
+                key="model_compatibility",
+                status="warn",
+                message=f"Disabled incompatible model(s): {', '.join(sorted(blocked))}",
+            )
+        )
 
     ok = not any(c.status == "fail" for c in checks)
     return SelfCheckResponse(

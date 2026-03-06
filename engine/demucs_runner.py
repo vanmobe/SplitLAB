@@ -18,6 +18,7 @@ FALLBACK_MODELS = [
     "mdx",
     "mdx_extra",
 ]
+DEMUX_MLX_MDX_MODELS = {"mdx", "mdx_extra", "mdx_q", "mdx_extra_q"}
 
 
 def _resample_linear(audio: np.ndarray, src_sr: int, dst_sr: int) -> np.ndarray:
@@ -92,6 +93,32 @@ def fallback_models_for_backend(backend_name: str | None) -> list[str]:
     if backend_name in {"demucs", "demucs-mlx"}:
         return FALLBACK_MODELS.copy()
     return []
+
+
+def _demucs_mlx_supports_mdx_models() -> bool:
+    """
+    Newer MLX builds removed `mlx.core.angle`, which currently breaks MDX model
+    variants in demucs-mlx. Guard these models when unsupported.
+    """
+    try:
+        import mlx.core as mx
+
+        return hasattr(mx, "angle")
+    except Exception:
+        return False
+
+
+def incompatible_models_for_backend(backend_name: str | None) -> set[str]:
+    if backend_name == "demucs-mlx" and not _demucs_mlx_supports_mdx_models():
+        return DEMUX_MLX_MDX_MODELS.copy()
+    return set()
+
+
+def filter_compatible_models(models: list[str], backend_name: str | None) -> list[str]:
+    blocked = incompatible_models_for_backend(backend_name)
+    if not blocked:
+        return models
+    return [m for m in models if m not in blocked]
 
 
 def _quality_params(quality_mode: str) -> tuple[float, int, int]:
@@ -201,6 +228,18 @@ def run_demucs_mlx(
     Returns a folder containing output stems.
     """
     output_root.mkdir(parents=True, exist_ok=True)
+    backend_name, _, _ = resolve_demucs_backend()
+    blocked = incompatible_models_for_backend(backend_name)
+    if model and model in blocked:
+        raise RuntimeError(
+            f"Model '{model}' is currently incompatible with backend {backend_name} on this system. "
+            "Use htdemucs/htdemucs_ft (or update MLX/demucs-mlx)."
+        )
+    if ensemble_model and ensemble_model in blocked:
+        raise RuntimeError(
+            f"Ensemble model '{ensemble_model}' is currently incompatible with backend {backend_name} on this system. "
+            "Use htdemucs/htdemucs_ft (or update MLX/demucs-mlx)."
+        )
     if progress_cb:
         progress_cb(0.12, "Preparing input audio…")
     prepared_input = _prepare_input_audio(input_path, output_root)
