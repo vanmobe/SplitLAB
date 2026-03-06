@@ -92,14 +92,75 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
-      - name: Publish GitHub release assets (tag builds)
-        if: startsWith(github.ref, 'refs/tags/')
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download installer artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: splitlab-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Generate release notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          REPO="${GITHUB_REPOSITORY}"
+          NOTES="release-notes.md"
+
+          mapfile -t MAC_FILES < <(find release-assets -maxdepth 1 -type f \( -name "*.dmg" -o -name "*.app.tar.gz" \) | sort)
+          mapfile -t WIN_FILES < <(find release-assets -maxdepth 1 -type f \( -name "*.msi" -o -name "*.exe" \) | sort)
+
+          {
+            echo "# SPLITLAB ${TAG}"
+            echo
+            echo "## Downloads"
+            echo
+            echo "### macOS"
+            if [ ${#MAC_FILES[@]} -eq 0 ]; then
+              echo "- No macOS installers found in artifacts."
+            else
+              for f in "${MAC_FILES[@]}"; do
+                name="$(basename "$f")"
+                url_name="${name// /%20}"
+                echo "- [${name}](https://github.com/${REPO}/releases/download/${TAG}/${url_name})"
+              done
+            fi
+            echo
+            echo "### Windows"
+            if [ ${#WIN_FILES[@]} -eq 0 ]; then
+              echo "- No Windows installers found in artifacts."
+            else
+              for f in "${WIN_FILES[@]}"; do
+                name="$(basename "$f")"
+                url_name="${name// /%20}"
+                echo "- [${name}](https://github.com/${REPO}/releases/download/${TAG}/${url_name})"
+              done
+            fi
+            echo
+            echo "## Notes"
+            echo
+            echo "- Local AI stem separation"
+            echo "- Cross-platform desktop app (macOS + Windows)"
+            echo "- Optional model ensemble for higher quality output"
+          } > "${NOTES}"
+
+          echo "Generated release notes:"
+          cat "${NOTES}"
+
+      - name: Publish GitHub release assets
         uses: softprops/action-gh-release@v2
         with:
           draft: false
           prerelease: false
+          body_path: release-notes.md
           files: |
-            desktop-app/src-tauri/target/release/bundle/**/*.dmg
-            desktop-app/src-tauri/target/release/bundle/**/*.app.tar.gz
-            desktop-app/src-tauri/target/release/bundle/**/*.msi
-            desktop-app/src-tauri/target/release/bundle/**/*.exe
+            release-assets/*.dmg
+            release-assets/*.app.tar.gz
+            release-assets/*.msi
+            release-assets/*.exe

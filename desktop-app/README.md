@@ -42,6 +42,7 @@ npm run build
   - `push tags v*`: builds and publishes release assets
   - Run artifacts: downloadable in GitHub Actions under `splitlab-macos` / `splitlab-windows`
   - Release assets: `https://github.com/vanmobe/AUDIOLAB.sound.splitter/releases`
+  - Release notes include direct links to each generated installer file
 
 ## Screenshot Placeholder
 Store screenshots in `../docs/images/`.

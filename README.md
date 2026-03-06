@@ -60,6 +60,7 @@ This repo includes GitHub Actions workflows that produce downloadable desktop in
 - Release build: push a version tag (for example `v0.1.0`) to build and publish assets to GitHub Releases
 - Workflow artifacts: downloadable from the run page under `Artifacts` (`splitlab-macos`, `splitlab-windows`)
 - Release assets: downloadable from `https://github.com/vanmobe/AUDIOLAB.sound.splitter/releases`
+- Release notes: auto-generated with direct installer links per tag
 
 Workflow files:
 - `.github/workflows/build-installers.yml`
