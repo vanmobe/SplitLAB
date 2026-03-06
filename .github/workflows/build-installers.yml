@@ -68,6 +68,15 @@ jobs:
           desktop-app/resources/engine_bundle/.venv/Scripts/python.exe -m pip install -r desktop-app/resources/engine_bundle/requirements.txt
           Set-Content -Path desktop-app/resources/engine_bundle/.venv/.splitlab_runtime_ready -Value "ok"
 
+      - name: Verify bundled engine payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f desktop-app/resources/engine_bundle/server.py
+          test -f desktop-app/resources/engine_bundle/requirements.txt
+          echo "Bundled engine payload ready:"
+          ls -la desktop-app/resources/engine_bundle
+
       - name: Build Tauri app
         run: npm run tauri build
         working-directory: desktop-app
