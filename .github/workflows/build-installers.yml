@@ -175,6 +175,17 @@ jobs:
           path: release-assets
           merge-multiple: true
 
+      - name: Collect release files
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-upload
+          while IFS= read -r -d '' f; do
+            cp "$f" "release-upload/$(basename "$f")"
+          done < <(find release-assets -type f \( -name "*.dmg" -o -name "*.app.tar.gz" -o -name "*.msi" -o -name "*.exe" \) -print0)
+          echo "Collected files:"
+          ls -la release-upload || true
+
       - name: Generate release notes
         shell: bash
         run: |
@@ -183,8 +194,8 @@ jobs:
           REPO="${GITHUB_REPOSITORY}"
           NOTES="release-notes.md"
 
-          mapfile -t MAC_FILES < <(find release-assets -maxdepth 1 -type f \( -name "*.dmg" -o -name "*.app.tar.gz" \) | sort)
-          mapfile -t WIN_FILES < <(find release-assets -maxdepth 1 -type f \( -name "*.msi" -o -name "*.exe" \) | sort)
+          mapfile -t MAC_FILES < <(find release-upload -maxdepth 1 -type f \( -name "*.dmg" -o -name "*.app.tar.gz" \) | sort)
+          mapfile -t WIN_FILES < <(find release-upload -maxdepth 1 -type f \( -name "*.msi" -o -name "*.exe" \) | sort)
 
           {
             echo "# SPLITLAB ${TAG}"
@@ -229,13 +240,13 @@ jobs:
           set -euo pipefail
           shopt -s nullglob
           FILES=(
-            release-assets/*.dmg
-            release-assets/*.app.tar.gz
-            release-assets/*.msi
-            release-assets/*.exe
+            release-upload/*.dmg
+            release-upload/*.app.tar.gz
+            release-upload/*.msi
+            release-upload/*.exe
           )
           if [ ${#FILES[@]} -eq 0 ]; then
-            echo "No installer files found in release-assets. Failing release job."
+            echo "No installer files found in release-upload. Failing release job."
             exit 1
           fi
           echo "Release assets to publish:"
@@ -249,7 +260,7 @@ jobs:
           body_path: release-notes.md
           fail_on_unmatched_files: true
           files: |
-            release-assets/*.dmg
-            release-assets/*.app.tar.gz
-            release-assets/*.msi
-            release-assets/*.exe
+            release-upload/*.dmg
+            release-upload/*.app.tar.gz
+            release-upload/*.msi
+            release-upload/*.exe
