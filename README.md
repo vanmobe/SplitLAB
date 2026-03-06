@@ -1,4 +1,4 @@
-# AudioLab Sound Splitter
+# SPLITLAB
 
 Local stem splitter with:
 - Python engine (`engine/`)
