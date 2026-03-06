@@ -1,1 +1,9 @@
 .DS_Store
+engine/.venv/
+engine/.venv313/
+desktop-app/node_modules/
+desktop-app/dist/
+desktop-app/src-tauri/target/
+desktop-app/.vite/
+macos-app/*.xcodeproj/project.xcworkspace/xcuserdata/
+macos-app/*.xcodeproj/xcuserdata/

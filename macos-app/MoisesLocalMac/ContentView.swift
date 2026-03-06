@@ -4,7 +4,7 @@ import AppKit
 struct ContentView: View {
     @State private var pickedFile: URL?
     @State private var outputFolder: URL = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent("Music")
+        .appendingPathComponent("Desktop")
         .appendingPathComponent("MoisesLocalOutput")
 
     @State private var stems: Int = 4
@@ -19,7 +19,10 @@ struct ContentView: View {
     var body: some View {
         HStack(spacing: 16) {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Moises Local (Mac)").font(.title2).bold()
+                Text("AudioLab Splitter").font(.title2).bold()
+                Text("Choose a file, choose where stems should be written, then start.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
 
                 HStack {
                     Button("Choose Audio…") { pickAudio() }
@@ -30,8 +33,17 @@ struct ContentView: View {
                     }
                 }
 
+                HStack(alignment: .top) {
+                    Button("Choose Destination…") { pickOutputFolder() }
+                    Text(outputFolder.path)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .textSelection(.enabled)
+                }
+
                 HStack {
-                    Text("Preset:")
+                    Text("Quality:")
                     Picker("", selection: $preset) {
                         ForEach(Preset.allCases) { p in
                             Text(p.title).tag(p)
@@ -51,10 +63,15 @@ struct ContentView: View {
                 }
 
                 HStack {
-                    Button(isRunning ? "Running…" : "Split") {
+                    Button(isRunning ? "Running…" : "Start Split") {
                         Task { await startJob() }
                     }
-                    .disabled(pickedFile == nil || isRunning || !engine.isRunning)
+                    .disabled(pickedFile == nil || isRunning)
+
+                    Button("Refresh Engine") {
+                        Task { await engine.ensureRunning(engineDirHint: defaultEngineDir()) }
+                    }
+                    .disabled(isRunning)
 
                     Button("Open Output Folder") {
                         NSWorkspace.shared.open(outputFolder)
@@ -63,7 +80,10 @@ struct ContentView: View {
 
                 Text(engine.isRunning ? "Engine: running" : "Engine: not running")
                     .font(.caption)
-                    .foregroundStyle(engine.isRunning ? .secondary : .red)
+                    .foregroundStyle(engine.isRunning ? Color.secondary : Color.red)
+                Text(engine.statusMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
 
                 if let job {
                     ProgressView(value: job.progress)
@@ -88,7 +108,9 @@ struct ContentView: View {
             .onDrop(of: ["public.file-url"], isTargeted: nil) { providers in
                 if let item = providers.first {
                     _ = item.loadObject(ofClass: NSURL.self) { url, _ in
-                        DispatchQueue.main.async { self.pickedFile = url as URL? }
+                        if let nsURL = url as? NSURL {
+                            DispatchQueue.main.async { self.pickedFile = nsURL as URL }
+                        }
                     }
                     return true
                 }
@@ -102,10 +124,7 @@ struct ContentView: View {
 
                 // DEV path: assumes you run the app while current directory is repo root.
                 // If not, replace with an absolute path to your repo's engine folder.
-                let devEngineDir = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-                    .appendingPathComponent("engine", isDirectory: true)
-
-                await engine.ensureRunning(engineDir: devEngineDir)
+                await engine.ensureRunning(engineDirHint: defaultEngineDir())
             }
 
             LibraryView()
@@ -124,12 +143,39 @@ struct ContentView: View {
         }
     }
 
+    private func pickOutputFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = true
+        if panel.runModal() == .OK, let selected = panel.url {
+            outputFolder = selected
+        }
+    }
+
+    private func defaultEngineDir() -> URL {
+        let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
+        let direct = cwd.appendingPathComponent("engine", isDirectory: true)
+        if FileManager.default.fileExists(atPath: direct.path) {
+            return direct
+        }
+        return cwd.deletingLastPathComponent().appendingPathComponent("engine", isDirectory: true)
+    }
+
     private func startJob() async {
         guard let pickedFile else { return }
         errorText = nil
         isRunning = true
 
         do {
+            await engine.ensureRunning(engineDirHint: defaultEngineDir())
+            guard engine.isRunning else {
+                isRunning = false
+                errorText = engine.statusMessage
+                return
+            }
+
             let initial = try await EngineClient.shared.separate(
                 inputPath: pickedFile.path,
                 outputDir: outputFolder.path,

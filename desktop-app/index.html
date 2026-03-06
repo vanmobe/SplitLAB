@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="/src/styles.css" />
+    <title>AUDIOLAB Splitter</title>
+    <script type="module" src="/src/main.ts" defer></script>
+  </head>
+  <body>
+    <main class="app">
+      <header class="header">
+        <img class="brand-logo" src="/src/assets/splitlab-logo-wave.svg" alt="SplitLAB logo" />
+        <p class="subtitle">Local AI stem separation with pro-level control and instant stem auditioning.</p>
+      </header>
+
+      <div class="tabs">
+        <button id="tab-splitter" type="button" class="tab-btn active"><span class="ico">◈</span>Splitter</button>
+        <button id="tab-player" type="button" class="tab-btn"><span class="ico">◫</span>Player</button>
+        <button id="tab-guide" type="button" class="tab-btn"><span class="ico">ⓘ</span>Guide</button>
+      </div>
+
+      <section id="panel-splitter" class="tab-panel active">
+        <details class="card step-card" open>
+        <summary class="step-summary">
+          <span class="step-title">Step 1 · Engine</span>
+          <span id="step1-state" class="step-badge">unknown</span>
+        </summary>
+        <div class="step-body">
+        <div class="row">
+          <label for="engine-dir">Engine folder</label>
+          <div class="field-group">
+            <input id="engine-dir" type="text" placeholder="Path to engine directory" />
+            <button id="pick-engine-dir" type="button">Browse</button>
+          </div>
+        </div>
+        <div class="actions">
+          <button id="check-engine" type="button"><span class="ico">◎</span>Check Health</button>
+          <button id="start-engine" type="button"><span class="ico">▶</span>Start Engine</button>
+          <button id="stop-engine" type="button"><span class="ico">■</span>Stop Engine</button>
+        </div>
+        <p id="engine-status" class="status">Engine status: unknown</p>
+        </div>
+        </details>
+
+        <details class="card step-card">
+        <summary class="step-summary">
+          <span class="step-title">Step 2 · Diagnostics</span>
+          <span id="step2-state" class="step-badge">not run</span>
+        </summary>
+        <div class="step-body">
+        <div class="actions">
+          <button id="run-self-check" type="button"><span class="ico">✓</span>Run Self-Check</button>
+        </div>
+        <p id="self-check-status" class="status">Diagnostics: not run yet</p>
+        <ul id="self-check-list" class="check-list"></ul>
+        </div>
+        </details>
+
+        <details class="card step-card">
+        <summary class="step-summary">
+          <span class="step-title">Step 3 · Split Job</span>
+          <span id="step3-state" class="step-badge">idle</span>
+        </summary>
+        <div class="step-body">
+        <div class="row">
+          <label for="input-file">Input audio</label>
+          <div class="field-group">
+            <input id="input-file" type="text" placeholder="Path to input audio file" />
+            <button id="pick-input-file" type="button">Browse</button>
+          </div>
+        </div>
+        <div class="row">
+          <label for="output-dir">Output folder</label>
+          <div class="field-group">
+            <input id="output-dir" type="text" placeholder="Path to output directory" />
+            <button id="pick-output-dir" type="button">Browse</button>
+          </div>
+        </div>
+        <div class="row options">
+          <div>
+            <label for="stems">Stems</label>
+            <select id="stems">
+              <option value="2">2</option>
+              <option value="4" selected>4</option>
+            </select>
+          </div>
+          <div>
+            <label for="preset">Preset</label>
+            <select id="preset">
+              <option value="fast">Fast</option>
+              <option value="best" selected>Best</option>
+              <option value="vocal_boost">Vocal Boost</option>
+            </select>
+          </div>
+          <div>
+            <label for="quality-mode">Quality</label>
+            <select id="quality-mode">
+              <option value="fast">Fast</option>
+              <option value="balanced" selected>Balanced</option>
+              <option value="high">High</option>
+            </select>
+          </div>
+        </div>
+        <div class="row options">
+          <div>
+            <label for="model">
+              Model (optional)
+              <span class="inline-help" title="Primary model used for separation. Start with Default or a well-known general model.">?</span>
+            </label>
+            <select id="model">
+              <option value="">Default</option>
+            </select>
+          </div>
+          <div>
+            <label for="ensemble-model">
+              Ensemble model (optional)
+              <span class="inline-help" title="Runs a second model and averages outputs. Usually cleaner results, but slower (often close to 2x runtime).">?</span>
+            </label>
+            <select id="ensemble-model">
+              <option value="">None</option>
+            </select>
+          </div>
+        </div>
+        <div class="guide-grid model-notes">
+          <article class="guide-box">
+            <h3>Selected Model</h3>
+            <p id="model-help">Default model will be used. This is usually a balanced starting point for mixed music content. If artifacts remain, try a fine-tuned model or enable an ensemble model.</p>
+          </article>
+          <article class="guide-box">
+            <h3>Selected Ensemble Model</h3>
+            <p id="ensemble-help">No ensemble model selected. This keeps runtime lower and is good for quick iteration. Add an ensemble model when you want cleaner stems and can accept longer processing time.</p>
+          </article>
+        </div>
+        <div class="actions">
+          <button id="refresh-models" type="button"><span class="ico">↻</span>Refresh Models</button>
+          <button id="attach-job" type="button"><span class="ico">⇄</span>Attach Running Job</button>
+          <button id="start-job" type="button" class="primary"><span class="ico">▶</span>Start Split</button>
+          <button id="load-stems" type="button"><span class="ico">≣</span>Load Stems</button>
+          <button id="open-output" type="button"><span class="ico">⌂</span>Open Output Folder</button>
+        </div>
+        <div class="progress-wrap">
+          <progress id="progress" max="100" value="0"></progress>
+          <span id="progress-label">0%</span>
+        </div>
+        <p id="job-status" class="status">Job status: idle</p>
+        </div>
+        </details>
+      </section>
+
+      <section id="panel-player" class="tab-panel">
+        <details class="card step-card" open>
+        <summary class="step-summary">
+          <span class="step-title">Step 4 · Player</span>
+          <span id="step4-state" class="step-badge">not loaded</span>
+        </summary>
+        <div class="step-body">
+        <p class="subtitle">Preview and combine stems (for example: vocals + drums).</p>
+        <div class="row">
+          <label for="player-stems-dir">Stems folder</label>
+          <div class="field-group">
+            <input id="player-stems-dir" type="text" placeholder="Path to stems or output directory" />
+            <button id="pick-player-stems-dir" type="button">Browse</button>
+            <button id="load-stems-player" type="button"><span class="ico">≣</span>Load Stems</button>
+          </div>
+        </div>
+        <div class="actions">
+          <button id="play-selected" type="button" class="primary"><span class="ico">▶</span>Play Selected</button>
+          <button id="pause-selected" type="button"><span class="ico">‖</span>Pause</button>
+          <button id="stop-selected" type="button"><span class="ico">■</span>Stop</button>
+          <button id="select-all-stems" type="button"><span class="ico">✓</span>Select All</button>
+          <button id="select-none-stems" type="button"><span class="ico">×</span>Select None</button>
+        </div>
+        <div id="stem-list" class="stem-list"></div>
+        </div>
+        </details>
+      </section>
+
+      <section id="panel-guide" class="tab-panel">
+        <section class="card">
+          <h2>What SPLITLAB Does</h2>
+          <p class="subtitle">SPLITLAB separates one song into stems (vocals, drums, bass, other or 2-stem vocals/instrumental) on your own machine.</p>
+          <div class="guide-grid">
+            <article class="guide-box">
+              <h3>Typical Workflow</h3>
+              <ol>
+                <li>Start the Engine and run diagnostics.</li>
+                <li>Choose input file and output folder.</li>
+                <li>Select stems, quality, model, optional ensemble.</li>
+                <li>Start split and wait for completion.</li>
+                <li>Open Player tab, load stems, audition combinations.</li>
+              </ol>
+            </article>
+            <article class="guide-box">
+              <h3>Quality Controls</h3>
+              <ul>
+                <li><strong>Fast:</strong> quickest, lower separation quality.</li>
+                <li><strong>Balanced:</strong> best speed/quality tradeoff.</li>
+                <li><strong>High:</strong> slowest, often cleanest transients.</li>
+                <li><strong>Preset Best / Vocal Boost:</strong> adds more post-processing.</li>
+              </ul>
+            </article>
+          </div>
+        </section>
+        <section class="card">
+          <h2>Model Guidance</h2>
+          <div class="guide-grid">
+            <article class="guide-box">
+              <h3>Model</h3>
+              <p>Primary model used for separation. If unsure, keep <strong>Default</strong> or choose a known high-quality model from the list.</p>
+            </article>
+            <article class="guide-box">
+              <h3>Ensemble Model</h3>
+              <p>Runs a second model and averages outputs. Usually improves quality, but takes roughly 2x compute time.</p>
+            </article>
+            <article class="guide-box">
+              <h3>When To Use Ensemble</h3>
+              <ul>
+                <li>Use for final exports and difficult mixes.</li>
+                <li>Skip for quick previews or low-power machines.</li>
+              </ul>
+            </article>
+            <article class="guide-box">
+              <h3>Practical Tip</h3>
+              <p>Start with <strong>Balanced + one model</strong>. If artifacts remain, try <strong>High + ensemble</strong>.</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>Demucs Models (DMX / Demucs)</h2>
+          <div class="guide-grid">
+            <article class="guide-box">
+              <h3>htdemucs</h3>
+              <p>Strong all-round model and usually the safest first choice. It gives a good balance between separation quality and runtime. Recommended for most songs when you are starting.</p>
+            </article>
+            <article class="guide-box">
+              <h3>htdemucs_ft</h3>
+              <p>Fine-tuned variant that often improves detail and reduces artifacts on complex mixes. It is typically slower than the base model. Best for final exports when quality matters most.</p>
+            </article>
+            <article class="guide-box">
+              <h3>mdx / mdx_extra</h3>
+              <p>Can work very well for vocals and difficult bleed cases. Sometimes sounds more aggressive than Demucs-style models, so compare by ear. Great as an ensemble partner when you need cleaner vocal isolation.</p>
+            </article>
+            <article class="guide-box">
+              <h3>How To Choose</h3>
+              <p>Use one model first for fast iteration. If results are close, keep the faster one; if both have different strengths, combine them with Ensemble Model. For demanding tracks, try <strong>htdemucs_ft + mdx_extra</strong>.</p>
+            </article>
+          </div>
+        </section>
+      </section>
+
+      <section class="card">
+        <h2>Activity</h2>
+        <pre id="log" class="log"></pre>
+      </section>
+    </main>
+  </body>
+</html>
