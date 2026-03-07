@@ -397,19 +397,6 @@ fn python_launch_works(launch: &PythonLaunch) -> bool {
         .unwrap_or(false)
 }
 
-fn python_module_available(launch: &PythonLaunch, module: &str) -> bool {
-    let check = format!("import importlib.util,sys; sys.exit(0 if importlib.util.find_spec({module:?}) else 1)");
-    Command::new(&launch.program)
-        .args(&launch.pre_args)
-        .arg("-c")
-        .arg(check)
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
-}
-
 #[cfg(windows)]
 fn repair_windows_venv_cfg(engine_dir: &Path) -> Result<bool, String> {
     let cfg_path = engine_dir.join(".venv").join("pyvenv.cfg");
@@ -508,24 +495,6 @@ fn ensure_engine_runtime(engine_dir: &Path, log_path: &Path) -> Result<PythonLau
         }
         fs::write(&marker, b"ok")
             .map_err(|e| format!("Failed to write runtime marker {}: {e}", marker.display()))?;
-    }
-
-    #[cfg(windows)]
-    {
-        if !python_module_available(&venv_launch, "torchcodec") {
-            run_logged_python_command(
-                engine_dir,
-                log_path,
-                &venv_launch,
-                &["-m", "pip", "install", "torchcodec"],
-            )?;
-            if !python_module_available(&venv_launch, "torchcodec") {
-                return Err(
-                    "Missing required dependency 'torchcodec' for Windows demucs runtime. Check engine log for pip output."
-                        .to_string(),
-                );
-            }
-        }
     }
 
     Ok(venv_launch)

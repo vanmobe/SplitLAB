@@ -8,6 +8,7 @@ import subprocess
 import shutil
 import sys
 import importlib.util
+import importlib
 
 from jobs import STORE, run_job, external_demucs_running, external_demucs_processes
 from demucs_runner import (
@@ -99,6 +100,13 @@ def _parse_models_output(lines: list[str]) -> list[str]:
 def _module_exists(name: str) -> bool:
     return importlib.util.find_spec(name) is not None
 
+def _module_version(name: str) -> str | None:
+    try:
+        mod = importlib.import_module(name)
+        return getattr(mod, "__version__", None)
+    except Exception:
+        return None
+
 @app.get("/models", response_model=ModelsResponse)
 def models():
     try:
@@ -170,20 +178,21 @@ def self_check():
         )
 
     if backend_name == "demucs":
-        if _module_exists("torchcodec"):
+        ta_ver = _module_version("torchaudio")
+        if ta_ver:
             checks.append(
                 CheckItem(
-                    key="torchcodec",
+                    key="torchaudio",
                     status="pass",
-                    message="torchcodec is available.",
+                    message=f"torchaudio {ta_ver}",
                 )
             )
         else:
             checks.append(
                 CheckItem(
-                    key="torchcodec",
+                    key="torchaudio",
                     status="fail",
-                    message="torchcodec is missing. Install dependencies again before running splits on Windows/Linux.",
+                    message="torchaudio is missing. Install dependencies again before running splits.",
                 )
             )
 
