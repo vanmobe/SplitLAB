@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import sys
 import importlib.util
+import os
 import numpy as np
 from typing import Callable
 
@@ -79,6 +80,26 @@ def resolve_demucs_backend() -> tuple[str, list[str], str]:
         "or demucs (Windows/Linux)."
     )
 
+def resolve_ffmpeg_binary() -> str | None:
+    path = shutil.which("ffmpeg")
+    if path:
+        return path
+    try:
+        import imageio_ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        return None
+
+def demucs_subprocess_env() -> dict[str, str]:
+    env = os.environ.copy()
+    ffmpeg = resolve_ffmpeg_binary()
+    if ffmpeg:
+        ff_dir = str(Path(ffmpeg).parent)
+        env["PATH"] = ff_dir + os.pathsep + env.get("PATH", "")
+        env["FFMPEG_BINARY"] = ffmpeg
+        env["IMAGEIO_FFMPEG_EXE"] = ffmpeg
+    return env
+
 
 def demucs_list_models_cmd() -> list[str]:
     backend_name, base_cmd, _ = resolve_demucs_backend()
@@ -151,7 +172,13 @@ def _run_single_demucs(
         cmd += [model_flag, model]
     cmd += [str(input_path)]
 
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=demucs_subprocess_env(),
+    )
     timeout_sec = 60 * 30
     try:
         stdout, stderr = proc.communicate(timeout=timeout_sec)

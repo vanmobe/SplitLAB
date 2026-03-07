@@ -5,17 +5,18 @@ from pydantic import BaseModel
 from pathlib import Path
 import threading
 import subprocess
-import shutil
 import sys
 import importlib.util
 import importlib
 
 from jobs import STORE, run_job, external_demucs_running, external_demucs_processes
 from demucs_runner import (
+    demucs_subprocess_env,
     demucs_list_models_cmd,
     filter_compatible_models,
     fallback_models_for_backend,
     incompatible_models_for_backend,
+    resolve_ffmpeg_binary,
     resolve_demucs_backend,
 )
 
@@ -147,7 +148,7 @@ def self_check():
     blocked: set[str] = set()
     demucs_cmd: list[str] = []
     models: list[str] = []
-    ffmpeg_path = shutil.which("ffmpeg")
+    ffmpeg_path = resolve_ffmpeg_binary()
 
     checks.append(
         CheckItem(
@@ -221,6 +222,7 @@ def self_check():
                 text=True,
                 timeout=20,
                 check=False,
+                env=demucs_subprocess_env(),
             )
             if proc.returncode == 0:
                 models = filter_compatible_models(
