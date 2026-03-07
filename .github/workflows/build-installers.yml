@@ -82,7 +82,7 @@ jobs:
               out.append(line)
           if not replaced:
             raise SystemExit("Could not update version in desktop-app/src-tauri/Cargo.toml")
-          cargo_toml.write_text("\\n".join(out) + "\\n", encoding="utf-8")
+          cargo_toml.write_text("\n".join(out) + "\n", encoding="utf-8")
           PY
 
       - name: Prepare offline engine bundle (macOS)
@@ -117,6 +117,8 @@ jobs:
           if ($LASTEXITCODE -ge 8) {
             throw "Failed to copy bundled Python runtime (robocopy exit code $LASTEXITCODE)."
           }
+          # robocopy uses non-zero codes for successful copies (0-7).
+          $global:LASTEXITCODE = 0
           Set-Content -Path desktop-app/resources/engine_bundle/.venv/.splitlab_runtime_ready -Value "ok"
 
       - name: Verify bundled engine payload
