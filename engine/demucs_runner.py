@@ -57,23 +57,39 @@ def _prepare_input_audio(input_path: Path, output_root: Path) -> Path:
 def _module_exists(name: str) -> bool:
     return importlib.util.find_spec(name) is not None
 
+def _demucs_mlx_base_cmd() -> list[str] | None:
+    demucs_mlx_cmd = shutil.which("demucs-mlx")
+    if demucs_mlx_cmd:
+        return [demucs_mlx_cmd]
+    if _module_exists("demucs_mlx"):
+        return [sys.executable, "-m", "demucs_mlx"]
+    return None
 
-def resolve_demucs_backend() -> tuple[str, list[str], str]:
+def _demucs_base_cmd() -> list[str] | None:
+    demucs_cmd = shutil.which("demucs")
+    if demucs_cmd:
+        return [demucs_cmd]
+    if _module_exists("demucs.separate"):
+        return [sys.executable, "-m", "demucs.separate"]
+    return None
+
+def resolve_demucs_backend(model: str | None = None) -> tuple[str, list[str], str]:
     """
     Returns (backend_name, base_command, model_flag).
     backend_name is one of: demucs-mlx, demucs.
     """
-    demucs_mlx_cmd = shutil.which("demucs-mlx")
-    if demucs_mlx_cmd:
-        return ("demucs-mlx", [demucs_mlx_cmd], "-n")
-    if _module_exists("demucs_mlx"):
-        return ("demucs-mlx", [sys.executable, "-m", "demucs_mlx"], "-n")
+    mlx_cmd = _demucs_mlx_base_cmd()
+    demucs_cmd = _demucs_base_cmd()
+    model_name = (model or "").strip().lower()
 
-    demucs_cmd = shutil.which("demucs")
+    # Route MDX variants to standard demucs when available.
+    if model_name in DEMUX_MLX_MDX_MODELS and demucs_cmd:
+        return ("demucs", demucs_cmd, "-n")
+
+    if mlx_cmd:
+        return ("demucs-mlx", mlx_cmd, "-n")
     if demucs_cmd:
-        return ("demucs", [demucs_cmd], "-n")
-    if _module_exists("demucs.separate"):
-        return ("demucs", [sys.executable, "-m", "demucs.separate"], "-n")
+        return ("demucs", demucs_cmd, "-n")
 
     raise RuntimeError(
         "No Demucs backend found. Install demucs-mlx (macOS/Apple Silicon) "
@@ -102,17 +118,27 @@ def demucs_subprocess_env() -> dict[str, str]:
 
 
 def demucs_list_models_cmd() -> list[str]:
-    backend_name, base_cmd, _ = resolve_demucs_backend()
-    if backend_name == "demucs":
-        return base_cmd + ["--list-models"]
+    demucs_cmd = _demucs_base_cmd()
+    if demucs_cmd:
+        return demucs_cmd + ["--list-models"]
     # demucs-mlx variants are not consistent in list-models support.
     # Let callers use fallback model hints when listing is unavailable.
     return []
 
 
 def fallback_models_for_backend(backend_name: str | None) -> list[str]:
-    if backend_name in {"demucs", "demucs-mlx"}:
-        return FALLBACK_MODELS.copy()
+    has_demucs = _demucs_base_cmd() is not None
+    has_mlx = _demucs_mlx_base_cmd() is not None
+    if not has_demucs and not has_mlx:
+        return []
+    models: list[str] = []
+    if has_demucs or has_mlx:
+        models.extend(["htdemucs", "htdemucs_ft"])
+    if has_demucs:
+        models.extend(["mdx", "mdx_extra"])
+    # keep stable ordering
+    ordered = [m for m in FALLBACK_MODELS if m in models]
+    return ordered
     return []
 
 
@@ -130,7 +156,11 @@ def _demucs_mlx_supports_mdx_models() -> bool:
 
 
 def incompatible_models_for_backend(backend_name: str | None) -> set[str]:
-    if backend_name == "demucs-mlx" and not _demucs_mlx_supports_mdx_models():
+    # If demucs backend exists we can route MDX there, so do not block.
+    if _demucs_base_cmd() is not None:
+        return set()
+    # Otherwise demucs-mlx may crash with MDX variants (mlx.core.angle missing).
+    if backend_name == "demucs-mlx":
         return DEMUX_MLX_MDX_MODELS.copy()
     return set()
 
@@ -156,7 +186,7 @@ def _run_single_demucs(
     quality_mode: str,
     model: str | None,
 ) -> Path:
-    backend_name, base_cmd, model_flag = resolve_demucs_backend()
+    backend_name, base_cmd, model_flag = resolve_demucs_backend(model=model)
     overlap, shifts, segment = _quality_params(quality_mode)
     cmd = base_cmd + [
         "-o",

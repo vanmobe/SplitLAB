@@ -6,6 +6,7 @@ use std::thread;
 use std::time::Duration;
 use std::{env, fs::OpenOptions};
 use std::fs;
+use serde::Serialize;
 
 static ENGINE_CHILD: OnceLock<Mutex<Option<Child>>> = OnceLock::new();
 
@@ -64,6 +65,16 @@ fn find_engine_dir(root: &Path) -> Option<PathBuf> {
     None
 }
 
+fn engine_log_path() -> PathBuf {
+    env::temp_dir().join("audiolab-splitter-engine.log")
+}
+
+#[derive(Serialize)]
+struct EngineLogPayload {
+    path: String,
+    content: String,
+}
+
 #[tauri::command]
 fn engine_location_hint(engine_dir: Option<String>) -> Result<String, String> {
     let mut search_roots: Vec<PathBuf> = Vec::new();
@@ -77,7 +88,7 @@ fn engine_location_hint(engine_dir: Option<String>) -> Result<String, String> {
 
     let resolved = search_roots.iter().find_map(|root| find_engine_dir(root));
     let managed = splitlab_data_root().join("engine-managed").join("engine");
-    let log_path = env::temp_dir().join("audiolab-splitter-engine.log");
+    let log_path = engine_log_path();
 
     let mut lines: Vec<String> = Vec::new();
     if let Some(src) = resolved {
@@ -93,6 +104,35 @@ fn engine_location_hint(engine_dir: Option<String>) -> Result<String, String> {
     }
     lines.push(format!("Engine log file: {}", log_path.display()));
     Ok(lines.join("\n"))
+}
+
+#[tauri::command]
+fn engine_log_path_hint() -> Result<String, String> {
+    Ok(engine_log_path().to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn read_engine_log() -> Result<EngineLogPayload, String> {
+    let path = engine_log_path();
+    let content = if path.exists() {
+        fs::read_to_string(&path).map_err(|e| format!("Failed to read engine log: {e}"))?
+    } else {
+        return Err(format!("Engine log not found at {}", path.display()));
+    };
+    Ok(EngineLogPayload {
+        path: path.to_string_lossy().to_string(),
+        content,
+    })
+}
+
+#[tauri::command]
+fn write_text_file_at_path(path: String, content: String) -> Result<(), String> {
+    let p = PathBuf::from(path);
+    if let Some(parent) = p.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create parent folder {}: {e}", parent.display()))?;
+    }
+    fs::write(&p, content).map_err(|e| format!("Failed to write {}: {e}", p.display()))
 }
 
 fn default_engine_search_roots() -> Vec<PathBuf> {
@@ -413,6 +453,19 @@ fn python_module_available(launch: &PythonLaunch, module: &str) -> bool {
 }
 
 #[cfg(windows)]
+fn python_run_snippet(launch: &PythonLaunch, code: &str) -> bool {
+    Command::new(&launch.program)
+        .args(&launch.pre_args)
+        .arg("-c")
+        .arg(code)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+#[cfg(windows)]
 fn repair_windows_venv_cfg(engine_dir: &Path) -> Result<bool, String> {
     let cfg_path = engine_dir.join(".venv").join("pyvenv.cfg");
     let runtime_python = match find_bundled_runtime_python(engine_dir) {
@@ -512,6 +565,21 @@ fn ensure_engine_runtime(engine_dir: &Path, log_path: &Path) -> Result<PythonLau
             .map_err(|e| format!("Failed to write runtime marker {}: {e}", marker.display()))?;
     }
 
+    #[cfg(not(windows))]
+    {
+        // demucs on current torchaudio may require torchcodec for save() calls.
+        let has_demucs = python_module_available(&venv_launch, "demucs.separate");
+        let has_torchcodec = python_module_available(&venv_launch, "torchcodec");
+        if has_demucs && !has_torchcodec {
+            run_logged_python_command(
+                engine_dir,
+                log_path,
+                &venv_launch,
+                &["-m", "pip", "install", "torchcodec"],
+            )?;
+        }
+    }
+
     #[cfg(windows)]
     {
         // Older installs may have torchcodec which can break DLL loading in some setups.
@@ -522,6 +590,20 @@ fn ensure_engine_runtime(engine_dir: &Path, log_path: &Path) -> Result<PythonLau
                 log_path,
                 &venv_launch,
                 &["-m", "pip", "uninstall", "-y", "torchcodec"],
+            );
+        }
+
+        // If torchaudio is newer than expected, keep runtime stable by pinning.
+        let needs_pin = !python_run_snippet(
+            &venv_launch,
+            "import importlib,sys; m=importlib.import_module('torchaudio'); sys.exit(0 if str(getattr(m,'__version__','')).startswith('2.5.') else 1)",
+        );
+        if needs_pin {
+            let _ = run_logged_python_command(
+                engine_dir,
+                log_path,
+                &venv_launch,
+                &["-m", "pip", "install", "torch==2.5.1", "torchaudio==2.5.1"],
             );
         }
     }
@@ -606,7 +688,7 @@ fn start_engine(engine_dir: Option<String>, port: Option<u16>) -> Result<String,
         }
     }
 
-    let log_path = env::temp_dir().join("audiolab-splitter-engine.log");
+    let log_path = engine_log_path();
     let python = ensure_engine_runtime(&dir, &log_path)?;
 
     let stdout_file = OpenOptions::new()
@@ -746,7 +828,10 @@ pub fn run() {
             stop_engine,
             find_stems_dir,
             read_binary_file,
-            engine_location_hint
+            engine_location_hint,
+            engine_log_path_hint,
+            read_engine_log,
+            write_text_file_at_path
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

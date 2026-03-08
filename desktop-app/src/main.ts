@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 
 type Preset = "fast" | "best" | "vocal_boost";
 type QualityMode = "fast" | "balanced" | "high";
@@ -31,6 +31,11 @@ interface SelfCheckResponse {
   ffmpeg_path?: string | null;
   models_count: number;
   models: string[];
+}
+
+interface EngineLogPayload {
+  path: string;
+  content: string;
 }
 
 interface StemRow {
@@ -270,6 +275,19 @@ async function reportEngineLocationHint(): Promise<void> {
     const text = err instanceof Error ? err.message : String(err);
     log(`Engine location hint unavailable: ${text}`);
   }
+}
+
+async function downloadEngineLog(): Promise<void> {
+  const payload = await invoke<EngineLogPayload>("read_engine_log");
+  const defaultName = "splitlab-engine.log";
+  const destination = await saveDialog({
+    title: "Save Engine Log",
+    defaultPath: defaultName,
+    filters: [{ name: "Log", extensions: ["log", "txt"] }],
+  });
+  if (!destination || typeof destination !== "string") return;
+  await invoke("write_text_file_at_path", { path: destination, content: payload.content });
+  log(`Engine log saved to ${destination} (source: ${payload.path})`);
 }
 
 async function ensureEngine(): Promise<void> {
@@ -944,6 +962,12 @@ window.addEventListener("DOMContentLoaded", () => {
   });
   $("check-engine").addEventListener("click", () => {
     checkEngine().catch((err) => log(String(err)));
+  });
+  $("download-engine-log").addEventListener("click", () => {
+    downloadEngineLog().catch((err) => {
+      const text = err instanceof Error ? err.message : String(err);
+      log(`Failed to download engine log: ${text}`);
+    });
   });
   startEngineBtn.addEventListener("click", async () => {
     try {

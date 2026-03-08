@@ -7,6 +7,7 @@ import uuid
 import threading
 import subprocess
 import shutil
+import traceback
 from datetime import timedelta
 
 try:
@@ -190,11 +191,11 @@ def run_job(job: Job) -> None:
         }
 
         def _run_sep() -> None:
-            def _on_progress(p: float, m: str) -> None:
-                sep_state["progress"] = p
-                sep_state["message"] = m
-
             try:
+                def _on_progress(p: float, m: str) -> None:
+                    sep_state["progress"] = p
+                    sep_state["message"] = m
+
                 result["stems_folder"] = run_demucs_mlx(
                     job.input_path,
                     temp_root,
@@ -206,6 +207,7 @@ def run_job(job: Job) -> None:
                 )
             except Exception as e:
                 result["error"] = str(e)
+                result["traceback"] = traceback.format_exc()
 
         worker = threading.Thread(target=_run_sep, daemon=True)
         worker.start()
@@ -224,6 +226,9 @@ def run_job(job: Job) -> None:
         stems_folder = result.get("stems_folder")
         sep_error = result.get("error")
         if sep_error:
+            trace = str(result.get("traceback") or "").strip()
+            if trace:
+                raise RuntimeError(f"{sep_error}\n{trace[-2000:]}")
             raise RuntimeError(str(sep_error))
         if not stems_folder:
             raise RuntimeError("Separation failed before output was produced.")
